@@ -1,3 +1,6 @@
+*.yml
+*.conf
+
 *.gem
 *.rbc
 /.config

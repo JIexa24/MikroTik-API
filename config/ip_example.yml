@@ -1,0 +1,15 @@
+---
+
+- name: Gate_1
+  ip_or_dns: 192.168.1.1
+  icmp_port_knock:
+    - 111
+    - 222
+    - 333
+
+- name: Gate_2
+  ip_or_dns: 172.16.1.1
+  icmp_port_knock:
+    - 222
+    - 333
+    - 444
