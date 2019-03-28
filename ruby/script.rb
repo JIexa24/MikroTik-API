@@ -1,5 +1,6 @@
 #!/usr/bin/env ruby
 require_relative "functions.rb"
+require_relative "helper.rb"
 require 'net/ssh'
 require 'rubygems'
 require 'mtik'
@@ -117,8 +118,9 @@ class MikroTik
           set_ip_config if @ip_config.nil?
           unless @ip_config.nil?
             @ip_config.each_with_index do |v,i|
-              next if connect(v).nil?
-              @connection.get_reply("/export","=file=export")
+              break if connect(v).equal?(:MTikLoginFailed)
+              next if connect(v).equal?(:MTikConnectionFailed)
+              TryCatchMTik::try_catch(:TimeoutError, :ECONNRESET) { @connection.get_reply("/export","=file=export") }
               disconnect
             end
           end
@@ -245,7 +247,8 @@ class MikroTik
       set_ip_config if @ip_config.nil?
       unless @ip_config.nil?
         @ip_config.each_with_index do |v,i|
-          next if connect(v).nil?
+          break if connect(v).equal?(:MTikLoginFailed)
+          next if connect(v).equal?(:MTikConnectionFailed)
           get_file_list("backup").each_with_index do |v,i|
             @connection.get_reply("/file/remove", "=numbers=#{v[:name]}")
           end
@@ -298,7 +301,8 @@ class MikroTik
       set_ip_config if @ip_config.nil?
       unless @ip_config.nil?
         @ip_config.each_with_index do |v,i|
-          next if connect(v).nil?
+          break if connect(v).equal?(:MTikLoginFailed)
+          next if connect(v).equal?(:MTikConnectionFailed)
           get_users
           get_sysinfo
           @config_file.print "\r\n\r\n#{v["ip_or_dns"]} : #{@active_hostname}"
@@ -367,7 +371,8 @@ class MikroTik
       set_ip_config if @ip_config.nil?
       unless @ip_config.nil?
         @ip_config.each_with_index do |v,i|
-          next if connect(v).nil?
+          break if connect(v).equal?(:MTikLoginFailed)
+          next if connect(v).equal?(:MTikConnectionFailed)
           get_users
           if @users[_user].nil?
             @connection.get_reply("/user/add","=name=#{_user}","=group=#{_group}","=password=#{_pass}","=disabled=false") if !@users.key?(_user)
@@ -386,7 +391,8 @@ class MikroTik
       set_ip_config if @ip_config.nil?
       unless @ip_config.nil?
         @ip_config.each_with_index do |v,i|
-          next if connect(v).nil?
+          break if connect(v).equal?(:MTikLoginFailed)
+          next if connect(v).equal?(:MTikConnectionFailed)
           get_users
           unless @users[_user].nil?
             @connection.get_reply("/user/remove","=.id=#{@users[_user][:id]}") if @users.key?(_user)
@@ -454,8 +460,9 @@ class MikroTik
       _connection_status = true
       begin
         @connection = MTik::Connection.new(:host => host_config["ip_or_dns"], :user => "#{@login}", :pass => "#{@password}")
-      rescue Errno::ETIMEDOUT, Errno::ENETUNREACH, Errno::EHOSTUNREACH, Errno::ECONNREFUSED, Errno::ECONNRESET => err
+      rescue Errno::ETIMEDOUT, Errno::ENETUNREACH, Errno::EHOSTUNREACH, Errno::ECONNREFUSED, Errno::ECONNRESET, MTik::Error => err
         println("#{red(host_config["ip_or_dns"])}: Connection Error! - #{err}.")
+        return :MTikLoginFailed if err.message.include?("Login failed")
         _connection_status = false
         @connections_failed << [host_config["ip_or_dns"], host_config["name"]]
       end
@@ -468,8 +475,9 @@ class MikroTik
             _connection_status = true
             begin
               @connection = MTik::Connection.new(:host => v, :user => "#{@login}", :pass => "#{@password}")
-            rescue Errno::ETIMEDOUT, Errno::ENETUNREACH, Errno::EHOSTUNREACH, Errno::ECONNREFUSED, Errno::ECONNRESET => err
-              println("#{red(v)}: Connection Error! - #{err}.")
+            rescue Errno::ETIMEDOUT, Errno::ENETUNREACH, Errno::EHOSTUNREACH, Errno::ECONNREFUSED, Errno::ECONNRESET, MTik::Error => err
+              println("#{red(v)}: Repeat connection Error! - #{err}.")
+              return :MTikLoginFailed if err.include?("Login failed")
               _connection_status = false
               @connections_failed << [v, host_config["name"]]
             end
@@ -478,7 +486,7 @@ class MikroTik
         end
       end
       _connection_status ? @connection = @connection : @connection = nil
-      return nil if @connection.nil?
+      return :MTikConnectionFailed if (@connection.nil?())
       println("#{gre(host_config["ip_or_dns"])}: Connected.")
       @active_host = host_config["ip_or_dns"]
       @first_connect = @active_host unless @first_connection
