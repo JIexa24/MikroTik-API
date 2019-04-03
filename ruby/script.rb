@@ -33,6 +33,7 @@ class MikroTik
       @connections_count = 0
       @cmd = nil
       @users = {}
+      @groups = {}
       @active_host = ""
       @active_hostname = ""
       @last_backup_time = [["jan","01","1970"],["00","00","00"]]
@@ -118,8 +119,9 @@ class MikroTik
           set_ip_config if @ip_config.nil?
           unless @ip_config.nil?
             @ip_config.each_with_index do |v,i|
-              break if connect(v).equal?(:MTikLoginFailed)
-              next if connect(v).equal?(:MTikConnectionFailed)
+              _returned_status = connect(v)
+              break if _returned_status.equal?(:MTikLoginFailed)
+              next if _returned_status.equal?(:MTikConnectionFailed)
               TryCatchMTik::try_catch(:TimeoutError, :ECONNRESET) { @connection.get_reply("/export","=file=export") }
               disconnect
             end
@@ -247,8 +249,9 @@ class MikroTik
       set_ip_config if @ip_config.nil?
       unless @ip_config.nil?
         @ip_config.each_with_index do |v,i|
-          break if connect(v).equal?(:MTikLoginFailed)
-          next if connect(v).equal?(:MTikConnectionFailed)
+          _returned_status = connect(v)
+          break if _returned_status.equal?(:MTikLoginFailed)
+          next if _returned_status.equal?(:MTikConnectionFailed)
           get_file_list("backup").each_with_index do |v,i|
             @connection.get_reply("/file/remove", "=numbers=#{v[:name]}")
           end
@@ -265,10 +268,10 @@ class MikroTik
           wait_sec(@time_wait * 2)
           if @configure_server == true
             @connection.get_reply("/tool/e-mail/set","=address=#{@email_server}", "=from=#{"mikrotik@"+@email_server_name}", "=port=25","=start-tls=yes", "=user=#{@email}", "=password=#{@email_pass}")
+            wait_sec(@time_wait)
           end
-          wait_sec(@time_wait)
           if @first_connect.eql?(@active_host)
-            @connection.get_reply("/tool/e-mail/send", "=to=#{@email_to}", "=from=#{@email_from}","=subject=#{"Start : " + @sys[:platform] + " " + @sys[:"board-name"]+":"+ @sys[:version] + "@mikrotik." + @active_host.to_s + "_" + @active_hostname.to_s}", "=file=#{_backup_name+".backup" + "," + _export_name+".rsc"}", "=body=#{"Backup/Export\nTime: " + _time}")
+            @connection.get_reply("/tool/e-mail/send", "=to=#{@email_to}", "=from=#{@email_from}","=subject=#{"Start : " + @sys[:platform] + " " + @sys[:"board-name"] + ":" + @sys[:version] + "@mikrotik." + @active_host.to_s + "_" + @active_hostname.to_s}", "=file=#{_backup_name+".backup" + "," + _export_name+".rsc"}", "=body=#{"Backup/Export\nTime: " + _time}")
 #            @connection.get_reply("/tool/e-mail/send", "=to=#{@email_to}", "=from=#{@email_from}","=subject=#{"Start : " + @sys[:platform] + " " + @sys[:"board-name"]+":"+ @sys[:version] + "@mikrotik." + @active_host.to_s + "_" + @active_hostname.to_s}", "=file=#{_backup_name+".backup"}", "=body=#{"Backup\nTime: " + _time}")
           else
             @connection.get_reply("/tool/e-mail/send", "=to=#{@email_to}", "=from=#{@email_from}","=subject=#{@sys[:platform] + " " + @sys[:"board-name"] + ":" + @sys[:version] + "@mikrotik." + @active_host.to_s + "_" + @active_hostname.to_s}", "=file=#{_backup_name+".backup" + "," + _export_name+".rsc"}", "=body=#{"Backup/Export\nTime: " + _time}")
@@ -301,8 +304,9 @@ class MikroTik
       set_ip_config if @ip_config.nil?
       unless @ip_config.nil?
         @ip_config.each_with_index do |v,i|
-          break if connect(v).equal?(:MTikLoginFailed)
-          next if connect(v).equal?(:MTikConnectionFailed)
+          _returned_status = connect(v)
+          break if _returned_status.equal?(:MTikLoginFailed)
+          next if _returned_status.equal?(:MTikConnectionFailed)
           get_users
           get_sysinfo
           @config_file.print "\r\n\r\n#{v["ip_or_dns"]} : #{@active_hostname}"
@@ -323,7 +327,9 @@ class MikroTik
     def get_users
       return nil if @connection.nil?
       @users = {}
+      @groups = {}
       _users = get_menu(["user","print"])
+      _groups = get_menu(["user","group","print"])
       _users.each_with_index do |v, i|
         @users[v[:name]] = {}
         v.each_with_index do |val, ind|
@@ -331,6 +337,15 @@ class MikroTik
             val[0].to_sym => val[1]
           }
           @users[v[:name]].update(_users)
+        end
+      end
+      _groups.each_with_index do |v, i|
+        @groups[v[:name]] = {}
+        v.each_with_index do |val, ind|
+          _users = {
+            val[0].to_sym => val[1]
+          }
+          @groups[v[:name]].update(_users)
         end
       end
     end
@@ -371,14 +386,19 @@ class MikroTik
       set_ip_config if @ip_config.nil?
       unless @ip_config.nil?
         @ip_config.each_with_index do |v,i|
-          break if connect(v).equal?(:MTikLoginFailed)
-          next if connect(v).equal?(:MTikConnectionFailed)
+          _returned_status = connect(v)
+          break if _returned_status.equal?(:MTikLoginFailed)
+          next if _returned_status.equal?(:MTikConnectionFailed)
           get_users
-          if @users[_user].nil?
-            @connection.get_reply("/user/add","=name=#{_user}","=group=#{_group}","=password=#{_pass}","=disabled=false") if !@users.key?(_user)
-            println("#{gre(v["ip_or_dns"])}: User #{_user} has been create!")
+          if @groups[_group].nil?
+            println("#{red(v["ip_or_dns"])}: Group unavailable!")
           else
-            println("#{red(v["ip_or_dns"])}: User #{_user} on device!")
+            if @users[_user].nil?
+              @connection.get_reply("/user/add","=name=#{_user}","=group=#{_group}","=password=#{_pass}","=disabled=false") if !@users.key?(_user)
+              println("#{gre(v["ip_or_dns"])}: User #{_user} has been create!")
+            else
+              println("#{red(v["ip_or_dns"])}: User #{_user} on device!")
+            end
           end
           disconnect
         end
@@ -391,8 +411,9 @@ class MikroTik
       set_ip_config if @ip_config.nil?
       unless @ip_config.nil?
         @ip_config.each_with_index do |v,i|
-          break if connect(v).equal?(:MTikLoginFailed)
-          next if connect(v).equal?(:MTikConnectionFailed)
+          _returned_status = connect(v)
+          break if _returned_status.equal?(:MTikLoginFailed)
+          next if _returned_status.equal?(:MTikConnectionFailed)
           get_users
           unless @users[_user].nil?
             @connection.get_reply("/user/remove","=.id=#{@users[_user][:id]}") if @users.key?(_user)
@@ -462,9 +483,9 @@ class MikroTik
         @connection = MTik::Connection.new(:host => host_config["ip_or_dns"], :user => "#{@login}", :pass => "#{@password}")
       rescue Errno::ETIMEDOUT, Errno::ENETUNREACH, Errno::EHOSTUNREACH, Errno::ECONNREFUSED, Errno::ECONNRESET, MTik::Error => err
         println("#{red(host_config["ip_or_dns"])}: Connection Error! - #{err}.")
-        return :MTikLoginFailed if err.message.include?("Login failed")
         _connection_status = false
         @connections_failed << [host_config["ip_or_dns"], host_config["name"]]
+        return :MTikLoginFailed if err.message.include?("Login failed")
       end
       unless _connection_status
         unless host_config["alt_ip_or_dns"].nil?
@@ -477,9 +498,9 @@ class MikroTik
               @connection = MTik::Connection.new(:host => v, :user => "#{@login}", :pass => "#{@password}")
             rescue Errno::ETIMEDOUT, Errno::ENETUNREACH, Errno::EHOSTUNREACH, Errno::ECONNREFUSED, Errno::ECONNRESET, MTik::Error => err
               println("#{red(v)}: Repeat connection Error! - #{err}.")
-              return :MTikLoginFailed if err.include?("Login failed")
               _connection_status = false
               @connections_failed << [v, host_config["name"]]
+              return :MTikLoginFailed if err.include?("Login failed")
             end
             break if _connection_status
           end
