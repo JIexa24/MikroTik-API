@@ -122,7 +122,7 @@ class MikroTik
               _returned_status = connect(v)
               break if _returned_status.equal?(:MTikLoginFailed)
               next if _returned_status.equal?(:MTikConnectionFailed)
-              TryCatchMTik::try_catch(:TimeoutError, :ECONNRESET) { @connection.get_reply("/export","=file=export") }
+              TryCatchMTik::try_catch(Errno::ETIMEDOUT, Errno::ECONNRESET) { @connection.get_reply("/export","=file=export") }
               disconnect
             end
           end
@@ -171,6 +171,7 @@ class MikroTik
         @email_to = gets.chomp!.split(' ')[0]
       end
       println("#{yel("E-mail to update!")}")
+
       unless @mail_config.nil?
         if @mail_config[0]["email_from"].nil?
           print("#{blu("E-mail from")} > ")
@@ -215,6 +216,7 @@ class MikroTik
         @email = gets.chomp!.split(' ')[0]
       end
       println("#{yel("E-mail update!")}")
+
       @email_server_name = @email.split("@")[1]
 
       println("#{yel("E-mail server name: " + @email_server_name)}")
@@ -252,6 +254,7 @@ class MikroTik
           _returned_status = connect(v)
           break if _returned_status.equal?(:MTikLoginFailed)
           next if _returned_status.equal?(:MTikConnectionFailed)
+          TryCatchMTik::try_catch(MTik::TimeoutError, Errno::ECONNRESET) {
           get_file_list("backup").each_with_index do |v,i|
             @connection.get_reply("/file/remove", "=numbers=#{v[:name]}")
           end
@@ -277,6 +280,7 @@ class MikroTik
             @connection.get_reply("/tool/e-mail/send", "=to=#{@email_to}", "=from=#{@email_from}","=subject=#{@sys[:platform] + " " + @sys[:"board-name"] + ":" + @sys[:version] + "@mikrotik." + @active_host.to_s + "_" + @active_hostname.to_s}", "=file=#{_backup_name+".backup" + "," + _export_name+".rsc"}", "=body=#{"Backup/Export\nTime: " + _time}")
 #            @connection.get_reply("/tool/e-mail/send", "=to=#{@email_to}", "=from=#{@email_from}","=subject=#{@sys[:platform] + " " + @sys[:"board-name"] + ":" + @sys[:version] + "@mikrotik." + @active_host.to_s + "_" + @active_hostname.to_s}", "=file=#{_backup_name+".backup"}", "=body=#{"Backup\nTime: " + _time}")
           end
+          }
           disconnect
         end
       end
@@ -432,7 +436,6 @@ class MikroTik
         print("#{blu("File name(+.yml)")} > ")
         @ip_config_filename = gets.chomp!.split(' ')[0]
         @ip_config_filename.eql?("") ? @ip_config_filename = $ip_config_filename_g : @ip_config_filename = @ip_config_filename
-#        println @ip_config_filename
         @ip_config = load_yml("config/#{@ip_config_filename}.yml")
         unless @ip_config.nil?
           println("#{yel("File loaded!")}")
@@ -500,7 +503,7 @@ class MikroTik
               println("#{red(v)}: Repeat connection Error! - #{err}.")
               _connection_status = false
               @connections_failed << [v, host_config["name"]]
-              return :MTikLoginFailed if err.include?("Login failed")
+              return :MTikLoginFailed if err.message.include?("Login failed")
             end
             break if _connection_status
           end
