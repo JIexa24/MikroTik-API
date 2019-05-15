@@ -7,6 +7,7 @@ require 'mtik'
 
 #IP-address config file (ip.yml)
 $ip_config_filename_g = "none"
+$mail_config_filename_g = "mail_config"
 
 #Users functions
 
@@ -19,6 +20,7 @@ class MikroTik
       @ip_config = nil
       @mail_config = nil
       @ip_config_filename = $ip_config_filename_g
+      @mail_config_filename = $mail_config_filename_g
       @command = ""
       @login = "adm"
       @password = ""
@@ -116,16 +118,7 @@ class MikroTik
           println("#{gre("Goodbye!")}")
           return false
         when "t", "test"
-          set_ip_config if @ip_config.nil?
-          unless @ip_config.nil?
-            @ip_config.each_with_index do |v,i|
-              _returned_status = connect(v)
-              break if _returned_status.equal?(:MTikLoginFailed)
-              next if _returned_status.equal?(:MTikConnectionFailed)
-              TryCatchMTik::try_catch(Errno::ETIMEDOUT, Errno::ECONNRESET) { @connection.get_reply("/export","=file=export") }
-              disconnect
-            end
-          end
+
       end
 
       return true
@@ -157,8 +150,8 @@ class MikroTik
     end
 
     def configure_mail_server
-
-      @mail_config = load_yml("config/mail_config.yml")
+      set_mail_config if @mail_config.nil?
+      return if @mail_config.nil?
       unless @mail_config.nil?
         if @mail_config[0]["email_to"].nil?
           print("#{blu("E-mail to")} > ")
@@ -577,6 +570,22 @@ class MikroTik
       @ip_config[0]["ip_or_dns"] = @active_host
       @ip_config[0]["name"] = "Manual setup"
       @ip_config_filename = @active_host
+    end
+
+
+    def set_mail_config
+      @mail_config = nil
+      if @mail_config.nil?
+        print("#{blu("File name(+.yml)")} > ")
+        @mail_config_filename = gets.chomp!.split(' ')[0]
+        @mail_config_filename.eql?("") ? @mail_config_filename = $mail_config_filename_g : @mail_config_filename = @mail_config_filename
+        @mail_config = load_yml("config/#{@mail_config_filename}.yml")
+        unless @mail_config.nil?
+          println("#{yel("File loaded!")}")
+        else
+          @mail_config_filename = "none"
+        end
+      end
     end
 
     def print_status
