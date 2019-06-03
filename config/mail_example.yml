@@ -1,0 +1,6 @@
+---
+
+- email_to: email
+  email_from: email
+  email_server: ip
+  email: email

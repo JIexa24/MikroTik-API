@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 require_relative "functions.rb"
 require_relative "helper.rb"
-require 'net/ssh'
+#require 'net/ssh'
 require 'rubygems'
 require 'mtik'
 
