@@ -62,7 +62,7 @@ class MikroTik
       println("Ip_config - #{gre(@ip_config == nil ? "false" : "true")}")
       println(" - m/menu/? - Print menu")
       println(" - u/use - Use ip.yml")
-      println(" - s/set [l/login|p/password] - Set login/password for control-user on MikroTik")
+      println(" - s/set [l/login|p/password|h/host] - Set login/password/host for control MikroTik")
       println(" - c/create - Create new user on MikroTik")
       println(" - d/delete - Delete user on MikroTik")
       println(" - cmd/command - Run command on MikroTik (Don't have realisation)")
@@ -86,7 +86,7 @@ class MikroTik
 
       case @cmd[0]
         when "s", "set"
-          set_login_or_password
+          set_data
         when "g", "get"
           get_data
           print_status
@@ -438,7 +438,7 @@ class MikroTik
       end
     end
 
-    def set_login_or_password
+    def set_data
       _change = false
       if (!@cmd.index("p").nil? || !@cmd.index("password").nil?)
         if (!@cmd.index("p").nil?)
@@ -458,14 +458,29 @@ class MikroTik
           _change = true
         end
       end
+      if (!@cmd.index("h").nil? || !@cmd.index("host").nil?)
+        if (!@cmd.index("h").nil?)
+          set_ip_config @cmd[@cmd.index("h") + 1]
+          _change = true
+        else
+          set_ip_config @cmd[@cmd.index("host") + 1]
+          _change = true
+        end
+      end
 
       if (!_change)
         print("#{blu("New login")} > ")
-        @login = gets.chomp!.split(' ')[0]
+        _tmp = gets.chomp!.split(' ')[0]
+        @login = _tmp == "" ? @login : _tmp
         println("#{yel("Login update!")}")
         print("#{blu("New password")} > ")
-        @password = gets.chomp!.split(' ')[0]
+        _tmp = gets.chomp!.split(' ')[0]
+        @password = _tmp == "" ? @password : _tmp
         println("#{yel("Password update!")}")
+        print("#{blu("Host")} > ")
+        _tmp = gets.chomp!.split(' ')[0]
+        set_ip_config
+        println("#{yel("Host update!")}")
       end
     end
 
@@ -524,7 +539,11 @@ class MikroTik
       @active_host = nil
     end
 
-    def set_active_host
+    def set_active_host(*params)
+      unless params.nil?
+        @active_host = params[0];
+        return
+      end
       print("#{blu("Host")} > ")
       _host = gets.chomp!.split(' ')
       @active_host = _host[0]
@@ -562,9 +581,9 @@ class MikroTik
       return _reply
     end
 
-    def set_ip_config
+    def set_ip_config(*params)
       @ip_config = nil
-      set_active_host
+      set_active_host params[0]
       @ip_config = Array.new
       @ip_config[0] = Hash.new
       @ip_config[0]["ip_or_dns"] = @active_host
